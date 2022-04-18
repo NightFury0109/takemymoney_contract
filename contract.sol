@@ -1863,16 +1863,20 @@ contract TakeMyMoney is ERC20, Ownable, PaymentSplitter {
         uint256 swapAmount,
         address uniV2Router
     ) ERC20("TakeMyMoney v0.1", "PLS") PaymentSplitter(payees, shares) {
-        require(sell_tax >0 && sell_tax <100, "Incorrect sell tax");
+        require(addresses[0] != address(0) && addresses[1] != address(0) && addresses[2] != address(0), "TREASURY & MARKETING/DEV & REWARD ADDRESSES CANNOT BE ZERO");
+        require(
+            fees[0] != 0 && fees[1] != 0 && fees[2] != 0 && fees[3] != 0,
+            "CONSTR: Fees equal 0"
+        );
+        require(uniV2Router != address(0), "ROUTER CANNOT BE ZERO");
+        require(sellTax >0 && sellTax <100, "Incorrect sell tax");
         sellTax=sell_tax;
 
         treasury = addresses[0];
         devWallet = addresses[1];
         distributionPool = addresses[2];
 
-        require(devWallet != address(0) && treasury != address(0) && distributionPool != address(0), "FUTUR & REWARD ADDRESS CANNOT BE ZERO");
 
-        require(uniV2Router != address(0), "ROUTER CANNOT BE ZERO");
         IJoeRouter02 _uniswapV2Router = IJoeRouter02(uniV2Router);
 
         address _uniswapV2Pair = IJoeFactory(_uniswapV2Router.factory())
@@ -1883,16 +1887,12 @@ contract TakeMyMoney is ERC20, Ownable, PaymentSplitter {
 
         _setAutomatedMarketMakerPair(_uniswapV2Pair, true);
 
-        require(
-            fees[0] != 0 && fees[1] != 0 && fees[2] != 0 && fees[3] != 0,
-            "CONSTR: Fees equal 0"
-        );
         treasuryFee = fees[0];
         devFee = fees[1];
         rewardsFee = fees[2];
         liquidityPoolFee = fees[3];
         cashoutFee = fees[4];
-        // rwSwap = fees[5];
+        rwSwap = fees[5];
 
         totalFees = rewardsFee.add(liquidityPoolFee).add(treasuryFee).add(devFee);
 
@@ -2157,11 +2157,11 @@ contract TakeMyMoney is ERC20, Ownable, PaymentSplitter {
             .mul(rewardsFee)
             .div(100);
 
-            // uint256 rewardsTokenstoSwap = rewardsPoolTokens.mul(rwSwap).div(
-            //     100
-            // );
+            uint256 rewardsTokenstoSwap = rewardsPoolTokens.mul(rwSwap).div(
+                100
+            );
 
-            // swapAndSendToFee(distributionPool, rewardsTokenstoSwap);
+            swapAndSendToFee(distributionPool, rewardsTokenstoSwap);
             super._transfer(
                 address(this),
                 distributionPool,
