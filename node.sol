@@ -661,10 +661,14 @@ contract NODERewardManagement {
         uint256 rewardAvailable;
     }
 
-    uint256[3] public prices = [3*1e18, 10*1e18, 50*1e18];
-    uint256[3] public rewards = [0.018*1e18, 0.07*1e18, 0.39*1e18];
-    uint256[3] public claimTax = [35, 25, 12];
-    uint256[3] public claimTaxDays = [0, 7 days, 12 days];
+    uint256[3] public prices;
+    uint256[3] public rewards;
+    uint256[3] public claimTax;
+    uint256[3] public claimTaxDays;
+    // uint256[3] public prices = [3*1e18, 10*1e18, 50*1e18];
+    // uint256[3] public rewards = [0.018*1e18, 0.07*1e18, 0.39*1e18];
+    // uint256[3] public claimTax = [35, 25, 12];
+    // uint256[3] public claimTaxDays = [0, 7 days, 12 days];
 
     IterableMapping.Map private nodeOwners;
     mapping(address => NodeEntity[]) private _nodesOfUser;
@@ -685,7 +689,18 @@ contract NODERewardManagement {
     uint256 public totalRewardStaked = 0;
 
     constructor(
+        uint256[3] memory nodePrices,
+        uint256[3] memory nodeRewards,
+        uint256[3] memory claimTaxes,
+        uint256[3] memory taxChangeDays
     ) {
+        require(nodePrices.length > 0 && nodeRewards.length > 0 && claimTaxes.length > 0 && taxChangeDays.length > 0, "Constructor: Invalid inputs");
+
+        prices = nodePrices;
+        rewards = nodeRewards;
+        claimTax = claimTaxes;
+        claimTaxDays = taxChangeDays;
+        
         gateKeeper = msg.sender;
     }
 
@@ -708,7 +723,9 @@ contract NODERewardManagement {
     {
         distribution = true;
         uint256 numberOfnodeOwners = nodeOwners.keys.length;
+
         require(numberOfnodeOwners > 0, "DISTRI REWARDS: NO NODE OWNERS");
+
         if (numberOfnodeOwners == 0) {
             return (0, 0, lastIndexProcessed);
         }
@@ -760,6 +777,7 @@ contract NODERewardManagement {
             isNameAvailable(account, nodeName),
             "CREATE NODE: Name not available"
         );
+
         _nodesOfUser[account].push(
             NodeEntity({
                 name: nodeName,
@@ -769,8 +787,10 @@ contract NODERewardManagement {
                 rewardAvailable: 0
             })
         );
+
         nodeOwners.set(account, _nodesOfUser[account].length);
         totalNodesCreated++;
+
         if (autoDistri && !distribution) {
             distributeRewards(gasForDistribution, rewards[kind]);
         }
@@ -782,11 +802,13 @@ contract NODERewardManagement {
     returns (bool)
     {
         NodeEntity[] memory nodes = _nodesOfUser[account];
+
         for (uint256 i = 0; i < nodes.length; i++) {
             if (keccak256(bytes(nodes[i].name)) == keccak256(bytes(nodeName))) {
                 return false;
             }
         }
+
         return true;
     }
 
@@ -800,18 +822,23 @@ contract NODERewardManagement {
         uint256 _creationTime
     ) private view returns (NodeEntity storage) {
         uint256 numberOfNodes = nodes.length;
+
         require(
             numberOfNodes > 0,
             "CASHOUT ERROR: You don't have nodes to cash-out"
         );
+
         bool found = false;
         int256 index = binary_search(nodes, 0, numberOfNodes, _creationTime);
         uint256 validIndex;
+
         if (index >= 0) {
             found = true;
             validIndex = uint256(index);
         }
+
         require(found, "NODE SEARCH: No NODE Found with this blocktime");
+
         return nodes[validIndex];
     }
 
@@ -823,6 +850,7 @@ contract NODERewardManagement {
     ) private view returns (int256) {
         if (high >= low) {
             uint256 mid = (high + low).div(2);
+
             if (arr[mid].creationTime == x) {
                 return int256(mid);
             } else if (arr[mid].creationTime > x) {
@@ -840,18 +868,23 @@ contract NODERewardManagement {
     returns (uint256)
     {
         require(_creationTime > 0, "NODE: CREATIME must be higher than zero");
+
         NodeEntity[] storage nodes = _nodesOfUser[account];
         uint256 numberOfNodes = nodes.length;
+
         require(
             numberOfNodes > 0,
             "CASHOUT ERROR: You don't have nodes to cash-out"
         );
+
         NodeEntity storage node = _getNodeWithCreatime(nodes, _creationTime);
         uint256 rewardNode = (block.timestamp.sub(node.lastClaimTime)).mul(rewards[node.kind]).div(86400).add(node.rewardAvailable);
+
         if (takeTax) {
             uint tax = _calcClaimTax(node);
             rewardNode = rewardNode.mul(100-tax).div(100);
         }
+
         node.rewardAvailable = 0;
         node.lastClaimTime = block.timestamp;
         return rewardNode;
@@ -915,18 +948,24 @@ contract NODERewardManagement {
     {
         NodeEntity[] storage nodes = _nodesOfUser[account];
         uint256 nodesCount = nodes.length;
+
         require(nodesCount > 0, "NODE: CREATIME must be higher than zero");
+
         NodeEntity storage _node;
         uint256 rewardsTotal = 0;
+
         for (uint256 i = 0; i < nodesCount; i++) {
             if(nodes[i].kind != kind)
                 continue;
+
             _node = nodes[i];
             uint256 rewardNode = (block.timestamp.sub(_node.lastClaimTime)).mul(rewards[_node.kind]).div(86400).add(_node.rewardAvailable);
+
             if (takeTax) {
                 uint tax = _calcClaimTax(_node);
                 rewardNode = rewardNode.mul(100-tax).div(100);
             }
+
             if(amount >= rewardsTotal + rewardNode) {
                 _node.rewardAvailable = 0;
                 _node.lastClaimTime = block.timestamp;
@@ -935,6 +974,7 @@ contract NODERewardManagement {
                 _node.lastClaimTime = block.timestamp;
                 break;
             }
+
             rewardsTotal += rewardNode;
         }
         return rewardsTotal;
@@ -1159,8 +1199,32 @@ contract NODERewardManagement {
         prices = newNodePrice;
     }
 
+    function _getPrice(uint index) external view returns(uint256) {
+        return prices[index];
+    }
+
     function _changeRewardPerNode(uint256[3] memory newRewards) external onlySentry {
         rewards = newRewards;
+    }
+
+    function _getReward(uint index) external view returns(uint256) {
+        return rewards[index];
+    }
+
+    function _changeClaimTax(uint256[3] memory newClaimTax) external onlySentry {
+        claimTax = newClaimTax;
+    }
+
+    function _getClaimTax(uint index) external view returns(uint256) {
+        return claimTax[index];
+    }
+
+    function _changeTaxChangeDays(uint256[3] memory newTaxChangeDays) external onlySentry {
+        claimTaxDays = newTaxChangeDays;
+    }
+
+    function _getTaxChangeDays(uint index) external view returns(uint256) {
+        return claimTaxDays[index];
     }
 
     function _changeClaimTime(uint256 newTime) external onlySentry {
@@ -1190,6 +1254,7 @@ contract NODERewardManagement {
     function _calcClaimTax(NodeEntity memory node) internal view returns (uint) {
         uint tax = 0;
         uint256 passedTime = block.timestamp - node.creationTime;
+
         for(uint i = 0; i < claimTaxDays.length; i++) {
             if( i < claimTaxDays.length - 1) {
                 if(passedTime >= claimTaxDays[i] && passedTime < claimTaxDays[i+1]) {

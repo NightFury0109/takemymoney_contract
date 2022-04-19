@@ -1772,7 +1772,6 @@ contract PaymentSplitter is Context {
 interface INODERewardManagement {
     function createNode(address account, string memory nodeName, uint kind) external;
     function _getRewardAmountOfKind(address account, uint kind, bool takeTax) external view returns (uint256);
-    function prices(uint index) external view returns(uint256);
     function _cashoutAllNodesRewardKind(address account, uint kind, uint amount, bool takeTax) external returns (uint256);
     function _getRewardAmountOf(address account, bool takeTax) external view returns (uint256);
     function _getRewardAmountOf(address account, uint256 _creationTime, bool takeTax) external view returns (uint256);
@@ -1782,8 +1781,13 @@ interface INODERewardManagement {
     function _getNodeNumberOf(address account) external view returns (uint256);
     function _isNodeOwner(address account) external view returns (bool);
     function _changeNodePrice(uint256[3] memory newNodePrice) external;
+    function _getPrice(uint index) external view returns(uint256);
     function _changeRewardPerNode(uint256[3] memory newRewards) external;
-    function rewards(uint index) external view returns(uint256);
+    function _getReward(uint index) external view returns(uint256);
+    function _changeClaimTax(uint256[3] memory newClaimTax) external;
+    function _getClaimTax(uint index) external view returns(uint256);
+    function _changeTaxChangeDays(uint256[3] memory newTaxChangeDays) external;
+    function _getTaxChangeDays(uint index) external view returns(uint256);
     function _changeClaimTime(uint256 newTime) external;
     function claimTime() external view returns(uint256);
     function _changeAutoDistri(bool newMode) external;
@@ -1857,7 +1861,7 @@ contract TakeMyMoney is ERC20, Ownable, PaymentSplitter {
         address[] memory payees,
         uint256[] memory shares,
         address[] memory addresses,
-        uint256[] memory balances,
+        // uint256[] memory balances,
         uint256[] memory fees,
         uint256 sell_tax,
         uint256 swapAmount,
@@ -1868,14 +1872,25 @@ contract TakeMyMoney is ERC20, Ownable, PaymentSplitter {
             fees[0] != 0 && fees[1] != 0 && fees[2] != 0 && fees[3] != 0,
             "CONSTR: Fees equal 0"
         );
+        require(sell_tax >0 && sell_tax <100, "Incorrect sell tax");
+        require(swapAmount > 0, "CONSTR: Swap amount incorrect");
         require(uniV2Router != address(0), "ROUTER CANNOT BE ZERO");
-        require(sellTax >0 && sellTax <100, "Incorrect sell tax");
+
         sellTax=sell_tax;
+        swapTokensAmount = swapAmount * (10**18);
 
         treasury = addresses[0];
         devWallet = addresses[1];
         distributionPool = addresses[2];
 
+        treasuryFee = fees[0];
+        devFee = fees[1];
+        rewardsFee = fees[2];
+        liquidityPoolFee = fees[3];
+        cashoutFee = fees[4];
+        rwSwap = fees[5];
+
+        totalFees = rewardsFee.add(liquidityPoolFee).add(treasuryFee).add(devFee);
 
         IJoeRouter02 _uniswapV2Router = IJoeRouter02(uniV2Router);
 
@@ -1887,14 +1902,6 @@ contract TakeMyMoney is ERC20, Ownable, PaymentSplitter {
 
         _setAutomatedMarketMakerPair(_uniswapV2Pair, true);
 
-        treasuryFee = fees[0];
-        devFee = fees[1];
-        rewardsFee = fees[2];
-        liquidityPoolFee = fees[3];
-        cashoutFee = fees[4];
-        rwSwap = fees[5];
-
-        totalFees = rewardsFee.add(liquidityPoolFee).add(treasuryFee).add(devFee);
 
         // require(addresses.length > 0 && balances.length > 0, "CONSTR: addresses array length must be greater than zero");
         // require(addresses.length == balances.length, "CONSTR: addresses arrays length mismatch");
@@ -1903,8 +1910,6 @@ contract TakeMyMoney is ERC20, Ownable, PaymentSplitter {
         //     _mint(addresses[i], balances[i] * (10**18));
         // }
         // require(totalSupply() == 20456743e18, "CONSTR: totalSupply must equal 20 million");
-        require(swapAmount > 0, "CONSTR: Swap amount incorrect");
-        swapTokensAmount = swapAmount * (10**18);
     }
 
     modifier onlyPresale() {
@@ -1912,8 +1917,9 @@ contract TakeMyMoney is ERC20, Ownable, PaymentSplitter {
         _;
     }
 
-    function mint(address account, uint256 amount) external onlyOwner {
-        _mint(account, amount);
+    function mint(uint256 amount) external onlyOwner {
+        require(amount > 0,"Incorrect amount");
+        _mint(owner(), amount);
     }
 
     function setNodeManagement(address nodeManagement) external onlyOwner {
@@ -1973,7 +1979,7 @@ contract TakeMyMoney is ERC20, Ownable, PaymentSplitter {
     }
 
     function updateSellTax(uint256 _newTax) external onlyOwner {
-        require(_newTax < 100, "Invalid Tax");
+        require(_newTax < 100 && _newTax >=0, "Invalid Tax");
         sellTax = _newTax;
     }
 
@@ -2089,26 +2095,36 @@ contract TakeMyMoney is ERC20, Ownable, PaymentSplitter {
     function compound(uint kind, string memory name) public {
         address sender = msg.sender;
         uint256 rewardAmount = nodeRewardManager._getRewardAmountOfKind(sender, kind, false);
-        uint256 nodePrice = nodeRewardManager.prices(kind);
+        uint256 nodePrice = nodeRewardManager._getPrice(kind);
         uint256 balance = balanceOf(sender);
+
         require(rewardAmount.add(balance) >= nodePrice, "Insufficient balance");
+
         uint256 claimAmount = rewardAmount;
-        if(rewardAmount > nodePrice)
+
+        if(rewardAmount >= nodePrice)
             claimAmount = nodePrice;
+
         super._transfer(distributionPool, sender, claimAmount);
+
         nodeRewardManager._cashoutAllNodesRewardKind(sender, kind, claimAmount, true);
+
         createNodeWithTokens(kind, name);
     }
 
     function compoundWithGodMod(uint kind, string memory name) public {
         address sender = msg.sender;
         uint256 rewardAmount = nodeRewardManager._getRewardAmountOf(sender, kind, false);
-        uint256 nodePrice = nodeRewardManager.prices(kind);
+        uint256 nodePrice = nodeRewardManager._getPrice(kind);
         uint256 balance = balanceOf(sender);
+
         require(rewardAmount.add(balance) >= nodePrice, "Insufficient balance");
+
         uint256 claimAmount = rewardAmount;
-        if(rewardAmount > nodePrice)
+
+        if(rewardAmount >= nodePrice)
             claimAmount = nodePrice;
+
         super._transfer(distributionPool, sender, claimAmount);
         nodeRewardManager._cashoutAllNodesReward(sender, claimAmount, true);
         createNodeWithTokens(kind, name);
@@ -2119,23 +2135,29 @@ contract TakeMyMoney is ERC20, Ownable, PaymentSplitter {
             bytes(name).length > 3 && bytes(name).length < 32,
             "NODE CREATION: NAME SIZE INVALID"
         );
+
         address sender = _msgSender();
+        
         require(
             sender != address(0),
             "NODE CREATION:  creation from the zero address"
         );
         require(!_isBlacklisted[sender], "NODE CREATION: Blacklisted address");
         require(
-            sender != treasury && sender != distributionPool,
-            "NODE CREATION: futur and rewardsPool cannot create node"
+            sender != treasury && sender != distributionPool && sender != devWallet,
+            "NODE CREATION: treasury, devWallet and rewardsPool cannot create node"
         );
-        uint256 nodePrice = nodeRewardManager.prices(kind);
+
+        uint256 nodePrice = nodeRewardManager._getPrice(kind);
+
         require(
             balanceOf(sender) >= nodePrice,
             "NODE CREATION: Balance too low for creation."
         );
+
         uint256 contractTokenBalance = balanceOf(address(this));
         bool swapAmountOk = contractTokenBalance >= swapTokensAmount;
+
         if (
             swapAmountOk &&
             swapLiquify &&
@@ -2162,6 +2184,7 @@ contract TakeMyMoney is ERC20, Ownable, PaymentSplitter {
             );
 
             swapAndSendToFee(distributionPool, rewardsTokenstoSwap);
+
             super._transfer(
                 address(this),
                 distributionPool,
@@ -2184,17 +2207,20 @@ contract TakeMyMoney is ERC20, Ownable, PaymentSplitter {
 
     function cashoutReward(uint256 blocktime) public {
         address sender = _msgSender();
+        
         require(sender != address(0), "CSHT:  creation from the zero address");
         require(!_isBlacklisted[sender], "MANIA CSHT: Blacklisted address");
         require(
-            sender != treasury && sender != distributionPool,
-            "CSHT: futur and rewardsPool cannot cashout rewards"
+            sender != treasury && sender != distributionPool && sender != devWallet,
+            "CSHT: treasury, devWallet and rewardsPool cannot cashout rewards"
         );
+
         uint256 rewardAmount = nodeRewardManager._getRewardAmountOf(
             sender,
             blocktime,
             true
         );
+
         require(
             rewardAmount > 0,
             "CSHT: You don't have enough reward to cash out"
@@ -2202,12 +2228,14 @@ contract TakeMyMoney is ERC20, Ownable, PaymentSplitter {
 
         if (swapLiquify) {
             uint256 feeAmount;
+
             if (cashoutFee > 0) {
                 feeAmount = rewardAmount.mul(cashoutFee).div(100);
                 swapAndSendToFee(devWallet, feeAmount);
             }
             rewardAmount -= feeAmount;
         }
+
         super._transfer(distributionPool, sender, rewardAmount);
         nodeRewardManager._cashoutNodeReward(sender, blocktime, true);
     }
@@ -2276,7 +2304,7 @@ contract TakeMyMoney is ERC20, Ownable, PaymentSplitter {
     }
 
     function getNodePrice(uint kind) public view returns (uint256) {
-        return nodeRewardManager.prices(kind);
+        return nodeRewardManager._getPrice(kind);
     }
 
     function changeRewardPerNode(uint256[3] memory newReward) public onlyOwner {
@@ -2284,7 +2312,23 @@ contract TakeMyMoney is ERC20, Ownable, PaymentSplitter {
     }
 
     function getRewardPerNode(uint kind) public view returns (uint256) {
-        return nodeRewardManager.rewards(kind);
+        return nodeRewardManager._getReward(kind);
+    }
+
+    function changeClaimTax(uint256[3] memory newClaimTax) public onlyOwner {
+        nodeRewardManager._changeClaimTax(newClaimTax);
+    }
+
+    function getClaimTax(uint kind) public view returns (uint256) {
+        return nodeRewardManager._getClaimTax(kind);
+    }
+    
+    function changeTaxChangeDays(uint256[3] memory newTaxChangeDays) public onlyOwner {
+        nodeRewardManager._changeTaxChangeDays(newTaxChangeDays);
+    }
+
+    function getTaxChangeDay(uint kind) public view returns (uint256) {
+        return nodeRewardManager._getTaxChangeDays(kind);
     }
 
     function changeClaimTime(uint256 newTime) public onlyOwner {
