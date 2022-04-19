@@ -896,20 +896,26 @@ contract NODERewardManagement {
     {
         NodeEntity[] storage nodes = _nodesOfUser[account];
         uint256 nodesCount = nodes.length;
+
         require(nodesCount > 0, "NODE: CREATIME must be higher than zero");
+
         NodeEntity storage _node;
         uint256 rewardsTotal = 0;
+
         for (uint256 i = 0; i < nodesCount; i++) {
             _node = nodes[i];
             uint256 rewardNode = (block.timestamp.sub(_node.lastClaimTime)).mul(rewards[_node.kind]).div(86400).add(_node.rewardAvailable);
+
             if (takeTax) {
                 uint tax = _calcClaimTax(_node);
                 rewardNode = rewardNode.mul(100-tax).div(100);
             }
+
             rewardsTotal += rewardNode;
             _node.rewardAvailable = 0;
             _node.lastClaimTime = block.timestamp;
         }
+
         return rewardsTotal;
     }
 
@@ -919,16 +925,21 @@ contract NODERewardManagement {
     {
         NodeEntity[] storage nodes = _nodesOfUser[account];
         uint256 nodesCount = nodes.length;
+
         require(nodesCount > 0, "NODE: CREATIME must be higher than zero");
+
         NodeEntity storage _node;
         uint256 rewardsTotal = 0;
+
         for (uint256 i = 0; i < nodesCount; i++) {
             _node = nodes[i];
             uint256 rewardNode = (block.timestamp.sub(_node.lastClaimTime)).mul(rewards[_node.kind]).div(86400).add(_node.rewardAvailable);
+
             if (takeTax) {
                 uint tax = _calcClaimTax(_node);
                 rewardNode = rewardNode.mul(100-tax).div(100);
             }
+
             if(amount >= rewardsTotal + rewardNode) {
                 _node.rewardAvailable = 0;
                 _node.lastClaimTime = block.timestamp;
@@ -937,8 +948,10 @@ contract NODERewardManagement {
                 _node.lastClaimTime = block.timestamp;
                 break;
             }
+
             rewardsTotal += rewardNode;
         }
+
         return rewardsTotal;
     }
 
@@ -977,6 +990,7 @@ contract NODERewardManagement {
 
             rewardsTotal += rewardNode;
         }
+
         return rewardsTotal;
     }
 
@@ -990,20 +1004,23 @@ contract NODERewardManagement {
     returns (uint256)
     {
         require(isNodeOwner(account), "GET REWARD OF: NO NODE OWNER");
+
         uint256 nodesCount;
         uint256 rewardCount = 0;
 
         NodeEntity[] storage nodes = _nodesOfUser[account];
         nodesCount = nodes.length;
-
         NodeEntity storage _node;
+
         for (uint256 i = 0; i < nodesCount; i++) {
             _node = nodes[i];
             uint256 rewardNode = (block.timestamp.sub(_node.lastClaimTime)).mul(rewards[_node.kind]).div(86400).add(_node.rewardAvailable);
+
             if (takeTax) {
                 uint tax = _calcClaimTax(_node);
                 rewardNode = rewardNode.mul(100-tax).div(100);
             }
+
             rewardCount += rewardNode;
         }
 
@@ -1016,22 +1033,26 @@ contract NODERewardManagement {
     returns (uint256)
     {
         require(isNodeOwner(account), "GET REWARD OF: NO NODE OWNER");
+
         uint256 nodesCount;
         uint256 rewardCount = 0;
 
         NodeEntity[] storage nodes = _nodesOfUser[account];
         nodesCount = nodes.length;
-
         NodeEntity storage _node;
+
         for (uint256 i = 0; i < nodesCount; i++) {
             if(nodes[i].kind != kind)
                 continue;
+
             _node = nodes[i];
             uint256 rewardNode = (block.timestamp.sub(_node.lastClaimTime)).mul(rewards[_node.kind]).div(86400).add(_node.rewardAvailable);
+
             if (takeTax) {
                 uint tax = _calcClaimTax(_node);
                 rewardNode = rewardNode.mul(100-tax).div(100);
             }
+
             rewardCount += rewardNode;
         }
 
@@ -1044,20 +1065,24 @@ contract NODERewardManagement {
     returns (uint256)
     {
         require(isNodeOwner(account), "GET REWARD OF: NO NODE OWNER");
-
         require(_creationTime > 0, "NODE: CREATIME must be higher than zero");
+
         NodeEntity[] storage nodes = _nodesOfUser[account];
         uint256 numberOfNodes = nodes.length;
+
         require(
             numberOfNodes > 0,
             "CASHOUT ERROR: You don't have nodes to cash-out"
         );
+
         NodeEntity storage node = _getNodeWithCreatime(nodes, _creationTime);
         uint256 rewardNode = (block.timestamp.sub(node.lastClaimTime)).mul(rewards[node.kind]).div(86400).add(node.rewardAvailable);
+
         if (takeTax) {
             uint tax = _calcClaimTax(node);
             rewardNode = rewardNode.mul(100-tax).div(100);
         }
+
         return rewardNode;
     }
 
@@ -1066,9 +1091,13 @@ contract NODERewardManagement {
     view
     returns (uint256)
     {
-        return
-        _getNodeWithCreatime(_nodesOfUser[account], creationTime)
-        .rewardAvailable;
+        require(isNodeOwner(account), "GET REWARD OF: NO NODE OWNER");
+        require(creationTime > 0, "NODE: CREATIME must be higher than zero");
+
+        NodeEntity storage node = _getNodeWithCreatime(_nodesOfUser[account], creationTime);
+        uint256 rewardNode = (block.timestamp.sub(node.lastClaimTime)).mul(rewards[node.kind]).div(86400).add(node.rewardAvailable);
+
+        return rewardNode;
     }
 
     function _getNodesNames(address account)
@@ -1077,15 +1106,18 @@ contract NODERewardManagement {
     returns (string memory)
     {
         require(isNodeOwner(account), "GET NAMES: NO NODE OWNER");
+
         NodeEntity[] memory nodes = _nodesOfUser[account];
         uint256 nodesCount = nodes.length;
         NodeEntity memory _node;
         string memory names = nodes[0].name;
         string memory separator = "#";
+
         for (uint256 i = 1; i < nodesCount; i++) {
             _node = nodes[i];
             names = string(abi.encodePacked(names, separator, _node.name));
         }
+
         return names;
     }
 
@@ -1095,6 +1127,7 @@ contract NODERewardManagement {
     returns (string memory)
     {
         require(isNodeOwner(account), "GET CREATIME: NO NODE OWNER");
+
         NodeEntity[] memory nodes = _nodesOfUser[account];
         uint256 nodesCount = nodes.length;
         NodeEntity memory _node;
@@ -1121,10 +1154,11 @@ contract NODERewardManagement {
     returns (string memory)
     {
         require(isNodeOwner(account), "GET REWARD: NO NODE OWNER");
+
         NodeEntity[] memory nodes = _nodesOfUser[account];
         uint256 nodesCount = nodes.length;
         NodeEntity memory _node;
-        string memory _rewardsAvailable = uint2str(nodes[0].rewardAvailable);
+        string memory _rewardsAvailable = uint2str((block.timestamp.sub(nodes[0].lastClaimTime)).mul(rewards[nodes[0].kind]).div(86400).add(nodes[0].rewardAvailable));
         string memory separator = "#";
 
         for (uint256 i = 1; i < nodesCount; i++) {
@@ -1199,32 +1233,16 @@ contract NODERewardManagement {
         prices = newNodePrice;
     }
 
-    function _getPrice(uint index) external view returns(uint256) {
-        return prices[index];
-    }
-
     function _changeRewardPerNode(uint256[3] memory newRewards) external onlySentry {
         rewards = newRewards;
-    }
-
-    function _getReward(uint index) external view returns(uint256) {
-        return rewards[index];
     }
 
     function _changeClaimTax(uint256[3] memory newClaimTax) external onlySentry {
         claimTax = newClaimTax;
     }
 
-    function _getClaimTax(uint index) external view returns(uint256) {
-        return claimTax[index];
-    }
-
     function _changeTaxChangeDays(uint256[3] memory newTaxChangeDays) external onlySentry {
         claimTaxDays = newTaxChangeDays;
-    }
-
-    function _getTaxChangeDays(uint index) external view returns(uint256) {
-        return claimTaxDays[index];
     }
 
     function _changeClaimTime(uint256 newTime) external onlySentry {

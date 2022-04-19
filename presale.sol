@@ -237,7 +237,7 @@ contract Ownable is IOwnable {
   }
 }
 
-interface IMythor {
+interface TakeMyMoney {
     function exchangeWithNode(uint kind, uint amount, string memory name, address account) external;
 }
 
@@ -245,43 +245,57 @@ contract Presale is Ownable {
   using SafeMath for uint256;
   using SafeERC20 for IERC20;
 
-  IMythor public  token;
+  TakeMyMoney public  token;
   uint[3] public prices = [0, 0, 0];
-  mapping(address=>mapping(uint=>uint)) tokenForUsers;
+  mapping(address=>mapping(uint=>uint)) public tokenForUsers;
 
   IERC20 public buyToken;
 
   uint256 public startTime;
   uint256 public endTime;
 
-  constructor(IMythor _token, IERC20 _buyToken) {
+  constructor(TakeMyMoney _token, IERC20 _buyToken) {
       token = _token;
       buyToken = _buyToken;
   }
+
   function initialize(uint[3] memory _prices, uint256 _startTime, uint256 _endTime) external onlyOwner {
       prices = _prices;
       startTime = _startTime;
       endTime = _endTime;
   }
+
   function purchase(uint kind, uint amount) external {
       require(block.timestamp >= startTime && block.timestamp <= endTime, "Not started");
       require(address(buyToken) != address(0), "invalid buyToken");
       require(kind < 3, "invalid kind");
       require(prices[kind] > 0, "invalid balance");
+
       uint256 totalAmount = prices[kind].mul(amount);
+
+      require(buyToken.balanceOf(msg.sender) >= totalAmount, "Insufficient balance");
+
       buyToken.transferFrom(msg.sender, address(this), totalAmount);
       tokenForUsers[msg.sender][kind] += amount;
   }
+
   function exchangeWithNode(uint kind, string memory name) external {      
       require(block.timestamp > endTime, "Not ended");
       require(tokenForUsers[msg.sender][kind] >= 1, "not enough balance");
+
       token.exchangeWithNode(kind, 1, name, msg.sender);
       tokenForUsers[msg.sender][kind]--;
   }
+
   function withDraw(address account) external onlyOwner{
       payable(account).transfer(payable(address(this)).balance);
   }
+
   function withDraw(address account, IERC20 token) external onlyOwner{
       token.transfer(account, token.balanceOf(address(this)));
   }
+  
+//   function getItemCount(address user, uint256 index) external returns(uint256) {
+//     return tokenForUsers[user][index];
+//   }
 }
