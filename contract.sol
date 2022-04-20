@@ -1,4 +1,4 @@
-
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
 /**
@@ -1827,8 +1827,6 @@ contract TakeMyMoney is ERC20, Ownable, PaymentSplitter {
     uint256 public treasuryFee;
     uint256 public totalFees;
 
-    uint256 public cashoutFee;
-
     uint256 private rwSwap;
     bool private swapping = false;
     bool private swapLiquify = true;
@@ -1887,8 +1885,7 @@ contract TakeMyMoney is ERC20, Ownable, PaymentSplitter {
         devFee = fees[1];
         rewardsFee = fees[2];
         liquidityPoolFee = fees[3];
-        cashoutFee = fees[4];
-        rwSwap = fees[5];
+        rwSwap = fees[4];
 
         totalFees = rewardsFee.add(liquidityPoolFee).add(treasuryFee).add(devFee);
 
@@ -1968,10 +1965,6 @@ contract TakeMyMoney is ERC20, Ownable, PaymentSplitter {
     function updateTreasuryFee(uint256 value) external onlyOwner {
         treasuryFee = value;
         totalFees = rewardsFee.add(liquidityPoolFee).add(treasuryFee).add(devFee);
-    }
-
-    function updateCashoutFee(uint256 value) external onlyOwner {
-        cashoutFee = value;
     }
 
     function updateRwSwapFee(uint256 value) external onlyOwner {
@@ -2213,6 +2206,12 @@ contract TakeMyMoney is ERC20, Ownable, PaymentSplitter {
         require(
             sender != treasury && sender != distributionPool && sender != devWallet,
             "CSHT: treasury, devWallet and rewardsPool cannot cashout rewards"
+        );        
+
+        uint256 rewardAmountWithoutTax = nodeRewardManager._getRewardAmountOf(
+            sender,
+            blocktime,
+            false
         );
 
         uint256 rewardAmount = nodeRewardManager._getRewardAmountOf(
@@ -2221,19 +2220,19 @@ contract TakeMyMoney is ERC20, Ownable, PaymentSplitter {
             true
         );
 
+        uint256 taxAmount = rewardAmountWithoutTax.sub(rewardAmount);
+
         require(
             rewardAmount > 0,
             "CSHT: You don't have enough reward to cash out"
         );
 
         if (swapLiquify) {
-            uint256 feeAmount;
-
-            if (cashoutFee > 0) {
-                feeAmount = rewardAmount.mul(cashoutFee).div(100);
-                swapAndSendToFee(devWallet, feeAmount);
+            if (taxAmount > 0) {
+                super._transfer(distributionPool, address(this), taxAmount);
+                swapAndSendToFee(devWallet, taxAmount.div(2));
+                swapAndSendToFee(distributionPool, taxAmount.div(2));
             }
-            rewardAmount -= feeAmount;
         }
 
         super._transfer(distributionPool, sender, rewardAmount);
@@ -2242,6 +2241,7 @@ contract TakeMyMoney is ERC20, Ownable, PaymentSplitter {
 
     function cashoutAll() public {
         address sender = _msgSender();
+
         require(
             sender != address(0),
             "MANIA CSHT:  creation from the zero address"
@@ -2251,18 +2251,22 @@ contract TakeMyMoney is ERC20, Ownable, PaymentSplitter {
             sender != treasury && sender != distributionPool,
             "MANIA CSHT: futur and rewardsPool cannot cashout rewards"
         );
+
+        uint256 rewardAmountWithoutTax = nodeRewardManager._getRewardAmountOf(sender, false);
         uint256 rewardAmount = nodeRewardManager._getRewardAmountOf(sender, true);
+        uint256 taxAmount = rewardAmountWithoutTax.sub(rewardAmount);
+
         require(
             rewardAmount > 0,
             "MANIA CSHT: You don't have enough reward to cash out"
         );
+        
         if (swapLiquify) {
-            uint256 feeAmount;
-            if (cashoutFee > 0) {
-                feeAmount = rewardAmount.mul(cashoutFee).div(100);
-                swapAndSendToFee(devWallet, feeAmount);
+            if (taxAmount > 0) {
+                super._transfer(distributionPool, address(this), taxAmount);
+                swapAndSendToFee(devWallet, taxAmount.div(2));
+                swapAndSendToFee(distributionPool, taxAmount.div(2));
             }
-            rewardAmount -= feeAmount;
         }
         super._transfer(distributionPool, sender, rewardAmount);
         nodeRewardManager._cashoutAllNodesReward(sender, true);
