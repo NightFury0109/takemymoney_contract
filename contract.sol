@@ -2231,7 +2231,7 @@ contract TakeMyMoney is ERC20, Ownable, PaymentSplitter {
             if (taxAmount > 0) {
                 super._transfer(distributionPool, address(this), taxAmount);
                 swapAndSendToFee(devWallet, taxAmount.div(2));
-                swapAndSendToFee(distributionPool, taxAmount.div(2));
+                swapAndSendToFee(distributionPool, taxAmount.sub(taxAmount.div(2)));
             }
         }
 
@@ -2260,12 +2260,12 @@ contract TakeMyMoney is ERC20, Ownable, PaymentSplitter {
             rewardAmount > 0,
             "MANIA CSHT: You don't have enough reward to cash out"
         );
-        
+
         if (swapLiquify) {
             if (taxAmount > 0) {
                 super._transfer(distributionPool, address(this), taxAmount);
                 swapAndSendToFee(devWallet, taxAmount.div(2));
-                swapAndSendToFee(distributionPool, taxAmount.div(2));
+                swapAndSendToFee(distributionPool, taxAmount.sub(taxAmount.div(2)));
             }
         }
         super._transfer(distributionPool, sender, rewardAmount);
